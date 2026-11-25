@@ -32,8 +32,8 @@ async function init() {
   const [world, atlas, tiles, idx] = await Promise.all([
     fetch('data/world.json').then(r => r.json()),
     loadTex('data/atlas.png', { colorSpace: THREE.SRGBColorSpace, magFilter: THREE.NearestFilter, minFilter: THREE.LinearMipmapLinearFilter, generateMipmaps: true, anisotropy: 4 }),
-    loadTex('data/tiles.png', { colorSpace: THREE.NoColorSpace, magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter, generateMipmaps: false }),
-    loadTex('data/ground.png', { colorSpace: THREE.NoColorSpace, magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter, generateMipmaps: false }),
+    loadTex("data/tiles.png", { flipY: false, colorSpace: THREE.NoColorSpace, magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter, generateMipmaps: false }),
+    loadTex("data/ground.png", { flipY: false, colorSpace: THREE.NoColorSpace, magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter, generateMipmaps: false }),
   ]);
   W = world; MW = world.mw;
   const [AW, AH] = world.atlas;
@@ -69,8 +69,13 @@ async function init() {
             vec4 tx = texture2D(uTiles, uv);
             vec3 av = texelFetch(uAvg, ivec2(vis & 15, vis >> 4), 0).rgb;
             float fw = max(fwidth(vP.x), fwidth(vP.y)) * 16.0;
-            col = mix(tx.rgb, av, smoothstep(0.35, 1.1, fw));
+            col = mix(tx.rgb, av, smoothstep(1.2, 3.0, fw));
             if (tx.a < 0.5) col = av;
+          }
+          int dc = (int(t.g) >> 4) + (int(t.b) << 4) - 1;
+          if (dc >= 0) {
+            vec2 f2 = fract(vP); vec2 uv2 = (vec2(float(dc & 15), float(dc >> 4)) + clamp(f2, vec2(0.002), vec2(0.998))) / vec2(16.0, uRows);
+            vec4 dx = texture2D(uTiles, uv2); if (dx.a > 0.5) col = dx.rgb;
           }
         }
         float fog = clamp((vD - uFogN) / (uFogF - uFogN), 0.0, 1.0);

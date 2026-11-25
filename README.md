@@ -1,13 +1,22 @@
 # GTA DDR – Shooter VR
 
-Die GTA-DDR-Stadt in echtem 3D zum Umhergehen – für die Meta Quest 2 (und am Bildschirm zum Ansehen).
+Die GTA-DDR-Stadt in echtem 3D – für die Meta Quest 2 (und am Bildschirm).
+Mit allen 8 Waffen, Munition, Item-Boxen, NPC-Kämpfern, Passanten und Deathmatch gegen Bots.
 
 **Spielen:** Seite im Quest-Browser öffnen und auf „In VR starten“ tippen.
 
-- Linker Stick: gehen (in Blickrichtung)
-- Rechter Stick: drehen (in Schritten)
-- Am Bildschirm: WASD gehen, Maus ziehen zum Umsehen
+**VR-Steuerung**
+- Linker Stick: gehen
+- Rechter Stick: drehen (flüssig); hoch/runter: Waffe wechseln
+- Rechter Trigger: schießen
+- A: springen
+- Rechter Griff: zoomen
+- B: nächste Waffe
+- Y: Menü
 
-Stand: Etappe 1 – Stadt zum Erkunden (noch ohne Waffen, NPCs und Mehrspieler).
+**Am Bildschirm**
+- WASD: gehen, Maus: zielen, linke Maustaste: schießen
+- Rechte Maustaste: springen, Leertaste: zoomen
+- Mausrad oder 1–8: Waffe wechseln, Esc: Menü
 
 Created by DeLorean23

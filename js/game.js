@@ -87,7 +87,7 @@ export async function initGame(C) {
   /* ---------- Spielerposition ---------- */
   const hv = new THREE.Vector3(), hq = new THREE.Quaternion();
   const xrOn = () => S._fx || renderer.xr.isPresenting;
-  function head() { (xrOn() && !S._fx ? renderer.xr.getCamera() : camera).getWorldPosition(hv); return hv; }
+  function head() { camera.getWorldPosition(hv); return hv; }
   const ppos = () => { const h = head(); return { x: h.x, z: h.z }; };
   function teleport(x, z) { const h = ppos(); rig.position.x += x - h.x; rig.position.z += z - h.z; }
 
@@ -109,6 +109,9 @@ export async function initGame(C) {
     uv.setXY(0, u0, vt); uv.setXY(1, u1, vt); uv.setXY(2, u0, vb); uv.setXY(3, u1, vb); uv.needsUpdate = true; }
   gun.geometry = gunGeo.clone(); flashM.geometry = flashM.geometry.clone();
   let handFor = null;
+  const egoTex = {}, egoMat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.5, side: THREE.DoubleSide, fog: false }), egoP = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), egoMat); egoP.visible = false; egoP.frustumCulled = false; scene.add(egoP);
+  function egoGet(src) { let t = egoTex[src]; if (!t) { t = egoTex[src] = new THREE.TextureLoader().load(src, tt => { tt.colorSpace = THREE.SRGBColorSpace; tt.magFilter = THREE.NearestFilter; tt.minFilter = THREE.NearestFilter; tt.needsUpdate = true; }); } return t; }
+  const aimV = new THREE.Vector3(), cpV = new THREE.Vector3();
   function setHandWeapon() {
     const w = WBY[S.cur]; if (!w) { gun.visible = false; return; } gun.visible = true; handFor = w.id; uvSet(gun, w.r.seite);
     const L = w.r.seite[2] * (w.szHand / 100) * 0.012; gun.scale.set(L, L * w.r.seite[3] / w.r.seite[2], 1); gun.position.set(0, 0, -L * 0.35);
@@ -172,7 +175,7 @@ export async function initGame(C) {
     row('NPC-KÄMPFER', S.botN, 206, () => { S.botN = clamp(S.botN - 1, 0, MAXBOTS); save(); }, () => { S.botN = clamp(S.botN + 1, 0, MAXBOTS); save(); });
     row('PASSANTEN', S.pedN, 254, () => { S.pedN = clamp(S.pedN - 10, 0, 200); save(); }, () => { S.pedN = clamp(S.pedN + 10, 0, 200); save(); });
     if (S.paused) btn('WEITERSPIELEN', 306, () => closeMenu());
-    const hint = xrOn() ? ['LINKER STICK: LAUFEN    RECHTER STICK: DREHEN', 'RECHTER TRIGGER: SCHIESSEN    A / B: WAFFE WECHSELN', 'Y: MENÜ    LINKE ANZEIGE: HERZEN, WAFFE, MUNITION'] : ['W A S D: LAUFEN    MAUS: ZIELEN    LINKE MAUSTASTE: SCHIESSEN', 'MAUSRAD ODER ZIFFERN 1-8: WAFFE WECHSELN    ESC: MENÜ'];
+    const hint = xrOn() ? ['LINKER STICK: LAUFEN    RECHTER STICK: DREHEN', 'TRIGGER: SCHIESSEN    A: SPRINGEN    GRIFF RECHTS: ZOOM', 'B ODER RECHTER STICK HOCH/RUNTER: WAFFE WECHSELN    Y: MENÜ'] : ['W A S D: LAUFEN    MAUS: ZIELEN    LINKE MAUSTASTE: SCHIESSEN', 'RECHTE MAUSTASTE: SPRINGEN    LEERTASTE: ZOOM', 'MAUSRAD ODER ZIFFERN 1-8: WAFFE WECHSELN    ESC: MENÜ'];
     hint.forEach((s, i) => txt(g, s, W / 2, 376 + i * 24, '#a0a8d0', 14, 'center'));
     mTex.needsUpdate = true;
   }
@@ -184,7 +187,7 @@ export async function initGame(C) {
     placeMenu(); S.place = xrOn() ? 20 : 0; menuMesh.visible = xrOn(); laser.visible = xrOn();
   }
   function placeMenu() { // Fläche vor den Kopf setzen
-    const h = head().clone(); const cam = xrOn() && !S._fx ? renderer.xr.getCamera() : camera; const f = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.getWorldQuaternion(hq)); f.y = 0; if (f.lengthSq() < 1e-4) f.set(0, 0, -1); f.normalize();
+    const h = head().clone(); const cam = camera; const f = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.getWorldQuaternion(hq)); f.y = 0; if (f.lengthSq() < 1e-4) f.set(0, 0, -1); f.normalize();
     menuMesh.position.set(h.x + f.x * 1.8, h.y - 0.05, h.z + f.z * 1.8); menuMesh.lookAt(h.x, h.y - 0.05, h.z);
   }
   function closeMenu() { S.state = 'play'; S.paused = false; menuC.style.display = 'none'; menuMesh.visible = false; laser.visible = false; cross.style.display = xrOn() ? 'none' : 'block'; if (!xrOn()) lockPtr(); }
@@ -369,7 +372,12 @@ export async function initGame(C) {
     for (const l of laserPool) l.visible = false; let li = 0;
     for (const t of S.tr) { const m = laserPool[li++] || addLaser(); m.visible = true; const a = m.geometry.attributes.position; a.setXYZ(0, t.a.x, t.a.y, t.a.z); a.setXYZ(1, t.b.x, t.b.y, t.b.z); a.needsUpdate = true; m.material.color.setHex(t.col); }
     // Waffe in der Hand / Bildschirm
-    if (xrOn()) { handGrp.visible = !S.dead; if (ctl.right && handGrp.parent !== ctl.right) ctl.right.add(handGrp); if (handFor !== S.cur) setHandWeapon(); flashM.visible = S.flash > 0; if (ctl.right) { ctl.right.updateMatrixWorld(true); const v = head().clone().applyMatrix4(new THREE.Matrix4().copy(ctl.right.matrixWorld).invert()); if (Math.hypot(v.x, v.y) > 1e-3) gp.rotation.z = Math.atan2(v.y, v.x); } }
+    if (xrOn()) { handGrp.visible = false; gun.visible = false; flashM.visible = false; const w = WBY[S.cur];
+      if (ctl.right && w && !S.dead && S.state === 'play') { ctl.right.updateMatrixWorld(true); ctl.right.getWorldPosition(cpV); aimV.set(0, 0, -1).transformDirection(ctl.right.matrixWorld);
+        const k = clamp((w.szEgo || 100) / 100, 0.3, 1.5), hh = 0.42 * k, src = 'data/ego/' + w.id + (S.flash > 0 ? '_ego_schuss' : '_ego') + '.png'; egoMat.map = egoGet(src); egoMat.needsUpdate = true;
+        egoP.scale.set(hh, hh, 1); egoP.position.copy(cpV).addScaledVector(aimV, 0.12); egoP.position.y += hh * 0.5 - 0.1;
+        const hp = head(); egoP.rotation.set(0, Math.atan2(hp.x - egoP.position.x, hp.z - egoP.position.z), 0); egoP.visible = true; } else egoP.visible = false;
+      if (false) { handGrp.visible = !S.dead; if (ctl.right && handGrp.parent !== ctl.right) ctl.right.add(handGrp); if (handFor !== S.cur) setHandWeapon(); flashM.visible = S.flash > 0; if (ctl.right) { ctl.right.updateMatrixWorld(true); const v = head().clone().applyMatrix4(new THREE.Matrix4().copy(ctl.right.matrixWorld).invert()); if (Math.hypot(v.x, v.y) > 1e-3) gp.rotation.z = Math.atan2(v.y, v.x); } } }
   }
   const laserPool = []; function addLaser() { const m = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, 1)]), new THREE.LineBasicMaterial({ color: 0xfff0a0 })); m.frustumCulled = false; scene.add(m); laserPool.push(m); return m; }
 
@@ -394,7 +402,7 @@ export async function initGame(C) {
   function pollXR() {
     const s = renderer.xr.getSession(); if (!s) return; const edge = (k, v) => { const r = v && !gpPrev[k]; gpPrev[k] = v; return r; };
     for (const src of s.inputSources) { const gp = src.gamepad; if (!gp) continue; const h = src.handedness, b = gp.buttons, B = i => !!(b[i] && b[i].pressed);
-      if (h === 'right') { const trg = B(0); S.fireHeld = trg; if (S.state === 'play') { if (edge('rt', trg)) fireWeapon(); if (edge('a', B(4))) nextWeapon(1); if (edge('b', B(5))) nextWeapon(-1); } else if (edge('rt', trg)) click(sel); }
+      if (h === 'right') { const trg = B(0); S.fireHeld = trg; if (S.state === 'play') { if (edge('rt', trg)) fireWeapon(); if (edge('a', B(4))) jump(); if (edge('b', B(5))) nextWeapon(1); const ry = gp.axes.length >= 4 ? gp.axes[3] : 0, rxx = gp.axes.length >= 4 ? gp.axes[2] : 0; if (Math.abs(ry) < 0.4) S._sa = true; else if (S._sa && Math.abs(ry) > 0.85 && Math.abs(rxx) < 0.6) { S._sa = false; nextWeapon(ry < 0 ? 1 : -1); } S.zoom = B(1); } else if (edge('rt', trg)) click(sel); }
       if (h === 'left') { if (edge('y', B(5)) && S.state === 'play') openMenu(true); } }
     if (S.state === 'menu' && ctl.right) { // Zeigestrahl auf die Menüfläche
       ctl.right.updateMatrixWorld(true); const o = new THREE.Vector3().setFromMatrixPosition(ctl.right.matrixWorld), d = new THREE.Vector3(0, 0, -1).transformDirection(ctl.right.matrixWorld); ray.set(o, d);
@@ -402,10 +410,34 @@ export async function initGame(C) {
       if (ns !== sel) { sel = ns; drawMenu(); } if (handGrp.parent !== ctl.right) ctl.right.add(handGrp); handGrp.visible = true; gun.visible = false; laser.visible = true; }
   }
 
+  /* ---------- Springen und Zoom ---------- */
+  S.jy = 0; S.vy = 0; S.zoom = false; const BASEFOV = camera.fov;
+  function jump() { if (S.state === 'play' && !S.dead && S.jy <= 0 && S.vy === 0) { S.vy = 4.6; Snd.jump && Snd.jump(); } }
+  function tickJump(dt) { if (S.jy > 0 || S.vy !== 0) { S.vy -= 14 * dt; S.jy += S.vy * dt; if (S.jy <= 0) { S.jy = 0; S.vy = 0; } } rig.position.y = S.jy; }
+  addEventListener('contextmenu', e => { if (!xrOn() && S.state === 'play') e.preventDefault(); });
+  renderer.domElement.addEventListener('pointerdown', e => { if (e.button === 2) jump(); });
+  addEventListener('keydown', e => { if (e.code === 'Space' && S.state === 'play') { S.zoom = true; e.preventDefault(); } });
+  addEventListener('keyup', e => { if (e.code === 'Space') S.zoom = false; });
+  const zf = () => (S.cur === 'Scharfschuetzengewehr' ? 5 : 2.2);
+  const scopeRT = new THREE.WebGLRenderTarget(512, 512), scopeCam = new THREE.PerspectiveCamera(14, 1, 0.1, 3000);
+  const scopeM = new THREE.Mesh(new THREE.CircleGeometry(0.17, 40), new THREE.MeshBasicMaterial({ map: scopeRT.texture, fog: false, depthTest: false })); scopeM.renderOrder = 996; scopeM.visible = false; scene.add(scopeM);
+  const scopeR = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.185, 40), new THREE.MeshBasicMaterial({ color: 0x000000, fog: false, depthTest: false })); scopeR.renderOrder = 997; scopeM.add(scopeR);
+  function tickZoom() {
+    const z = S.zoom && S.state === 'play' && !S.dead;
+    if (!xrOn()) { const f = z ? BASEFOV / zf() : BASEFOV; if (Math.abs(camera.fov - f) > 0.01) { camera.fov = f; camera.updateProjectionMatrix(); } }
+    scopeM.visible = z && xrOn() && !!ctl.right;
+  }
+  function preRender() { // Zoom-Fenster in VR: Blick entlang der rechten Hand
+    if (!scopeM.visible) return; ctl.right.updateMatrixWorld(true); ctl.right.getWorldPosition(scopeCam.position); aimV.set(0, 0, -1).transformDirection(ctl.right.matrixWorld); scopeCam.fov = 70 / zf(); scopeCam.updateProjectionMatrix();
+    scopeCam.lookAt(scopeCam.position.clone().add(aimV)); scopeCam.updateMatrixWorld(true);
+    const en = renderer.xr.enabled; renderer.xr.enabled = false; const pr = renderer.getRenderTarget(); egoP.visible = false; scopeM.visible = false; renderer.setRenderTarget(scopeRT); renderer.render(scene, scopeCam); renderer.setRenderTarget(pr); renderer.xr.enabled = en; scopeM.visible = true; egoP.visible = true;
+    const h = head(); const cm = camera.getWorldQuaternion(hq); scopeM.position.copy(h).add(new THREE.Vector3(0.12, -0.12, -0.55).applyQuaternion(cm)); scopeM.quaternion.copy(cm);
+  }
+
   /* ---------- Hauptschritt ---------- */
   let hudT = 0;
   function update(dt) {
-    S.t += dt; const p = ppos();
+    S.t += dt; tickJump(dt); tickZoom(); const p = ppos();
     if (xrOn()) { pollXR(); if (S.state === 'menu' && S.place > 0) { if (head().y > 0.4) placeMenu(); S.place--; } } else { cross.style.display = S.state === 'play' ? 'block' : 'none'; }
     if (S.state === 'play') {
       if (S.cd > 0) S.cd -= dt; if (S.flash > 0) S.flash -= dt; if (S.inv > 0) S.inv -= dt; if (S.nameT > 0) S.nameT -= dt; if (S.hurtT > 0) S.hurtT -= dt; if (S.toast) S.toast.t -= dt;
@@ -424,13 +456,13 @@ export async function initGame(C) {
     if (xrOn()) egoI.style.display = 'none'; else { const w = WBY[S.cur]; if (S.state === 'play' && w && !S.dead) { const src = 'data/ego/' + w.id + (S.flash > 0 ? '_ego_schuss' : '_ego') + '.png'; if (egoI.dataset.s !== src) { egoI.dataset.s = src; egoI.src = src; } egoI.style.display = 'block'; const k = clamp((w.szEgo || 100) / 100, 0.3, 1.5); egoI.style.height = 62 * k + 'vh'; } else egoI.style.display = 'none'; }
     // VR: Anzeige am linken Handgelenk
     if (xrOn()) { hudMesh.visible = S.state === 'play'; if (hudMesh.visible) { const l = ctl.left; if (l) { l.updateMatrixWorld(true); hudMesh.position.setFromMatrixPosition(l.matrixWorld); hudMesh.quaternion.setFromRotationMatrix(l.matrixWorld); hudMesh.translateY(0.1); hudMesh.translateZ(-0.02); hudMesh.rotateX(-PI * 0.38); }
-      else { const cm = S._fx ? camera : renderer.xr.getCamera(); hudMesh.position.copy(head()); hudMesh.quaternion.copy(cm.getWorldQuaternion(hq)); hudMesh.translateX(-0.35); hudMesh.translateY(-0.3); hudMesh.translateZ(-0.8); } } }
+      else { const cm = S._fx ? camera : camera; hudMesh.position.copy(head()); hudMesh.quaternion.copy(cm.getWorldQuaternion(hq)); hudMesh.translateX(-0.35); hudMesh.translateY(-0.3); hudMesh.translateZ(-0.8); } } }
   }
 
   /* ---------- Start ---------- */
   resetLoadout(); drawMenu();
   const api = {
-    update, canMove: () => S.state === 'play' && !S.dead || (S.dead && false), ownsMouse: () => !xrOn(), locked: () => locked, S, startGame, openMenu,
+    update, preRender, jump, canMove: () => S.state === 'play' && !S.dead || (S.dead && false), ownsMouse: () => !xrOn(), locked: () => locked, S, startGame, openMenu,
     onXR(on) { Snd.init(); if (on) { menuC.style.display = 'none'; try { document.exitPointerLock(); } catch (e) { } hudC.style.display = 'none'; if (S.state === 'menu') openMenu(S.paused); } else { menuC.style.display = S.state === 'menu' ? 'block' : 'none'; menuMesh.visible = false; hudMesh.visible = false; handGrp.visible = false; laser.visible = false; } },
     dbg: { hand: () => [handGrp.visible, gun.visible, handGrp.parent && handGrp.parent.type, gun.scale.toArray(), hudMesh.visible, hudMesh.position.toArray(), S.state, handFor], fakeXR() { S._fx = true; conn[0].matrixAutoUpdate = conn[1].matrixAutoUpdate = true; ctl.right = conn[0]; ctl.left = conn[1]; conn[0].position.set(0.25, -0.35, -0.5); conn[1].position.set(-0.25, -0.35, -0.5); camera.add(conn[0], conn[1]); conn[0].updateMatrixWorld(true); }, nChars: () => chars.n, cp: () => [cp.x, cp.z], fire: fireWeapon, give: id => giveAmmo(WBY[id], 50), cur: id => { S.cur = id; }, tp: teleport, hurt, kill, ppos },
   };

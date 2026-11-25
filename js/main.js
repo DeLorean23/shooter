@@ -157,24 +157,25 @@ const free = (x, z) => { const r = 0.35; return !(isBlocked(x - r, z - r) || isB
 function moveBy(dx, dz) { const p = rig.position; if (free(p.x + dx, p.z)) p.x += dx; if (free(p.x, p.z + dz)) p.z += dz; }
 
 const tmpV = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
-let snapArmed = true;
 function stepXR(dt) {
   const s = renderer.xr.getSession(); if (!s) return;
   let lx = 0, ly = 0, rx = 0;
   for (const src of s.inputSources) { const gp = src.gamepad; if (!gp) continue; const a = gp.axes, X = a.length >= 4 ? a[2] : a[0], Y = a.length >= 4 ? a[3] : a[1];
     if (src.handedness === 'left') { lx = X; ly = Y; } else if (src.handedness === 'right') { rx = X; } }
   const dz = Math.abs(lx) < 0.15 && Math.abs(ly) < 0.15;
-  if (!dz) { const xc = renderer.xr.getCamera(); xc.getWorldQuaternion(tmpQ); tmpV.set(0, 0, -1).applyQuaternion(tmpQ); const h = Math.atan2(-tmpV.x, -tmpV.z) ; // Blickrichtung
+  if (!dz) { const xc = camera; xc.getWorldQuaternion(tmpQ); tmpV.set(0, 0, -1).applyQuaternion(tmpQ); const h = Math.atan2(-tmpV.x, -tmpV.z) ; // Blickrichtung
     const fx = -Math.sin(h), fz = -Math.cos(h), sx = Math.cos(h), sz = -Math.sin(h);
     moveBy((fx * -ly + sx * lx) * SPEED * dt, (fz * -ly + sz * lx) * SPEED * dt); }
-  if (Math.abs(rx) < 0.35) snapArmed = true;
-  else if (snapArmed && Math.abs(rx) > 0.7) { snapArmed = false; const ang = (rx > 0 ? -1 : 1) * Math.PI / 6;
-    const xc = renderer.xr.getCamera(); const head = new THREE.Vector3().setFromMatrixPosition(xc.matrixWorld);
-    const before = head.clone(); rig.rotation.y += ang; rig.updateMatrixWorld(true);
-    // Kopf bleibt am Platz: Rig um die Kopfposition drehen
-    const rel = before.clone().sub(rig.position); const c = Math.cos(ang), sn = Math.sin(ang);
-    const rx2 = rel.x * c + rel.z * sn, rz2 = rel.x * -sn + rel.z * c; rig.position.x += rel.x - rx2; rig.position.z += rel.z - rz2; }
+  if (Math.abs(rx) > 0.15) { // flüssiges Drehen um die Kopfposition
+    const ang = -Math.sign(rx) * (Math.abs(rx) - 0.15) / 0.85 * 2.2 * dt; turnRig(ang); }
 }
+const _hq = new THREE.Vector3();
+function turnRig(ang) { // Rig um die senkrechte Achse durch den Kopf drehen, Kopf bleibt am Platz
+  let hx = 0, hz = 0; const fr = renderer.xr.getFrame && renderer.xr.getFrame(), rs = renderer.xr.getReferenceSpace();
+  const vp = fr && rs ? fr.getViewerPose(rs) : null; if (vp) { hx = vp.transform.position.x; hz = vp.transform.position.z; }
+  rig.updateMatrixWorld(true); _hq.set(hx, 0, hz); const w0 = _hq.clone().applyMatrix4(rig.matrixWorld);
+  rig.rotation.y += ang; rig.updateMatrixWorld(true); const w1 = _hq.clone().applyMatrix4(rig.matrixWorld);
+  rig.position.x += w0.x - w1.x; rig.position.z += w0.z - w1.z; }
 function stepDesk(dt, can) {
   rig.rotation.y = yaw; camera.rotation.x = pitch; if (can === false) return;
   const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0), r = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
@@ -186,7 +187,8 @@ let tLast = performance.now();
 renderer.setAnimationLoop(() => {
   const tn = performance.now(), dt = Math.min((tn - tLast) / 1000, 0.1); tLast = tn;
   if (W) { const can = !game || game.canMove(); if (renderer.xr.isPresenting) { if (can) stepXR(dt); } else stepDesk(dt, can); if (game) { try { game.update(dt); } catch (e) { if (!window.__ge) { window.__ge = 1; console.error(e); } } }
-    const hp = new THREE.Vector3().setFromMatrixPosition((renderer.xr.isPresenting ? renderer.xr.getCamera() : camera).matrixWorld); if (window.__sky) window.__sky.position.copy(hp); }
+    const hp = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld); if (window.__sky) window.__sky.position.copy(hp); }
+  if (game && game.preRender) { try { game.preRender(); } catch (e) { if (!window.__gp) { window.__gp = 1; console.error(e); } } }
   renderer.render(scene, camera);
 });
 

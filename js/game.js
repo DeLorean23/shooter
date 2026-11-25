@@ -122,7 +122,7 @@ export async function initGame(C) {
   const dom = document.createElement('div'); dom.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:5;font-family:monospace';
   const hudC = document.createElement('canvas'); hudC.width = 640; hudC.height = 360; hudC.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:none';
   const egoI = document.createElement('img'); egoI.style.cssText = 'position:absolute;right:0;bottom:0;height:62vh;image-rendering:pixelated;display:none';
-  const cross = document.createElement('div'); cross.style.cssText = 'position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #000;display:none';
+  const cross = document.createElement('div'); cross.style.cssText = 'position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px;border-radius:50%;background:#ff1a1a;box-shadow:0 0 0 2px #000,0 0 6px 2px rgba(255,255,255,.7);display:none';
   const flashD = document.createElement('div'); flashD.style.cssText = 'position:absolute;inset:0;background:#f00;opacity:0';
   const menuC = document.createElement('canvas'); menuC.width = 640; menuC.height = 460; menuC.style.cssText = 'position:absolute;left:50%;top:50%;width:min(92vw,128vh*0.78);transform:translate(-50%,-50%);image-rendering:pixelated;pointer-events:auto;display:none;cursor:pointer';
   const flashX = new THREE.Mesh(new THREE.PlaneGeometry(3, 3), new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0, depthTest: false, depthWrite: false, fog: false })); flashX.renderOrder = 1000; flashX.position.z = -0.3; flashX.frustumCulled = false; camera.add(flashX);
@@ -379,6 +379,12 @@ export async function initGame(C) {
         const hp = head(); egoP.rotation.set(0, Math.atan2(hp.x - egoP.position.x, hp.z - egoP.position.z), 0); egoP.visible = true; } else egoP.visible = false;
       if (false) { handGrp.visible = !S.dead; if (ctl.right && handGrp.parent !== ctl.right) ctl.right.add(handGrp); if (handFor !== S.cur) setHandWeapon(); flashM.visible = S.flash > 0; if (ctl.right) { ctl.right.updateMatrixWorld(true); const v = head().clone().applyMatrix4(new THREE.Matrix4().copy(ctl.right.matrixWorld).invert()); if (Math.hypot(v.x, v.y) > 1e-3) gp.rotation.z = Math.atan2(v.y, v.x); } } }
   }
+  const dotM = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0xff1a1a, fog: false, side: THREE.DoubleSide })); dotM.visible = false; dotM.renderOrder = 995; dotM.frustumCulled = false; scene.add(dotM);
+  function tickDot() {
+    if (!(xrOn() && ctl.right && S.state === 'play' && !S.dead && !S.zoom)) { dotM.visible = false; return; }
+    const [o, d] = aimRay(); let t = wallT(o, d, 90); const h = rayEnts(o, d.x, d.y, d.z, t, S.bots.concat(S.peds), 0.55); if (h.length) t = Math.min(t, h[0].t);
+    dotM.position.copy(o).addScaledVector(d, Math.max(0.3, t - 0.04)); dotM.scale.setScalar(Math.max(0.012, t * 0.0045)); dotM.lookAt(head()); dotM.visible = true;
+  }
   const laserPool = []; function addLaser() { const m = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, 1)]), new THREE.LineBasicMaterial({ color: 0xfff0a0 })); m.frustumCulled = false; scene.add(m); laserPool.push(m); return m; }
 
   /* ---------- Eingaben ---------- */
@@ -451,7 +457,7 @@ export async function initGame(C) {
     render(dt);
     { const fo = S.dead ? 0.55 : clamp(S.hurtT * 1.4, 0, 0.5); flashD.style.opacity = fo; flashX.material.opacity = xrOn() ? fo * 0.7 : 0; flashX.visible = fo > 0 && xrOn(); }
     // Anzeige
-    hudT -= dt; if (hudT <= 0 && S.state === 'play') { hudT = 0.1; if (xrOn()) { const c = hudTex.userData.c, g = c.getContext('2d'); drawHud(g, 512, 320); hudTex.needsUpdate = true; } else { drawHud(hudC.getContext('2d'), 640, 360); } }
+    tickDot(); hudT -= dt; if (hudT <= 0 && S.state === 'play') { hudT = 0.1; if (xrOn()) { const c = hudTex.userData.c, g = c.getContext('2d'); drawHud(g, 512, 320); hudTex.needsUpdate = true; } else { drawHud(hudC.getContext('2d'), 640, 360); } }
     hudC.style.display = !xrOn() && S.state === 'play' ? 'block' : 'none';
     if (xrOn()) egoI.style.display = 'none'; else { const w = WBY[S.cur]; if (S.state === 'play' && w && !S.dead) { const src = 'data/ego/' + w.id + (S.flash > 0 ? '_ego_schuss' : '_ego') + '.png'; if (egoI.dataset.s !== src) { egoI.dataset.s = src; egoI.src = src; } egoI.style.display = 'block'; const k = clamp((w.szEgo || 100) / 100, 0.3, 1.5); egoI.style.height = 62 * k + 'vh'; } else egoI.style.display = 'none'; }
     // VR: Anzeige am linken Handgelenk

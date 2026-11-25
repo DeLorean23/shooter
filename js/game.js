@@ -379,11 +379,18 @@ export async function initGame(C) {
         const hp = head(); egoP.rotation.set(0, Math.atan2(hp.x - egoP.position.x, hp.z - egoP.position.z), 0); egoP.visible = true; } else egoP.visible = false;
       if (false) { handGrp.visible = !S.dead; if (ctl.right && handGrp.parent !== ctl.right) ctl.right.add(handGrp); if (handFor !== S.cur) setHandWeapon(); flashM.visible = S.flash > 0; if (ctl.right) { ctl.right.updateMatrixWorld(true); const v = head().clone().applyMatrix4(new THREE.Matrix4().copy(ctl.right.matrixWorld).invert()); if (Math.hypot(v.x, v.y) > 1e-3) gp.rotation.z = Math.atan2(v.y, v.x); } } }
   }
-  const dotM = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0xff1a1a, fog: false, side: THREE.DoubleSide })); dotM.visible = false; dotM.renderOrder = 995; dotM.frustumCulled = false; scene.add(dotM);
+  const dotM = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0xff1a1a, fog: false, side: THREE.DoubleSide, transparent: true })); dotM.visible = false; dotM.renderOrder = 1001; dotM.frustumCulled = false; scene.add(dotM);
   function tickDot() {
-    if (!(xrOn() && ctl.right && S.state === 'play' && !S.dead && !S.zoom)) { dotM.visible = false; return; }
+    if (!(xrOn() && ctl.right)) { dotM.visible = false; return; }
+    ctl.right.updateMatrixWorld(true);
+    if (S.state === 'menu') { // Menü: Punkt dort, wohin die rechte Hand zeigt
+      const o = new THREE.Vector3().setFromMatrixPosition(ctl.right.matrixWorld), d = new THREE.Vector3(0, 0, -1).transformDirection(ctl.right.matrixWorld); ray.set(o, d);
+      const hit = ray.intersectObject(menuMesh, false)[0]; dotM.material.depthTest = false;
+      if (hit) { dotM.position.copy(hit.point).addScaledVector(d, -0.01); dotM.scale.setScalar(0.022); dotM.lookAt(o); dotM.visible = true; } else dotM.visible = false; return; }
+    dotM.material.depthTest = true;
+    if (!(S.state === 'play' && !S.dead && !S.zoom)) { dotM.visible = false; return; }
     const [o, d] = aimRay(); let t = wallT(o, d, 90); const h = rayEnts(o, d.x, d.y, d.z, t, S.bots.concat(S.peds), 0.55); if (h.length) t = Math.min(t, h[0].t);
-    dotM.position.copy(o).addScaledVector(d, Math.max(0.3, t - 0.04)); dotM.scale.setScalar(Math.max(0.012, t * 0.0045)); dotM.lookAt(head()); dotM.visible = true;
+    dotM.position.copy(o).addScaledVector(d, Math.max(0.3, t - 0.04)); dotM.scale.setScalar(Math.max(0.03, t * 0.006)); dotM.lookAt(head()); dotM.visible = true;
   }
   const laserPool = []; function addLaser() { const m = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, 1)]), new THREE.LineBasicMaterial({ color: 0xfff0a0 })); m.frustumCulled = false; scene.add(m); laserPool.push(m); return m; }
 
@@ -470,7 +477,7 @@ export async function initGame(C) {
   const api = {
     update, preRender, jump, canMove: () => S.state === 'play' && !S.dead || (S.dead && false), ownsMouse: () => !xrOn(), locked: () => locked, S, startGame, openMenu,
     onXR(on) { Snd.init(); if (on) { menuC.style.display = 'none'; try { document.exitPointerLock(); } catch (e) { } hudC.style.display = 'none'; if (S.state === 'menu') openMenu(S.paused); } else { menuC.style.display = S.state === 'menu' ? 'block' : 'none'; menuMesh.visible = false; hudMesh.visible = false; handGrp.visible = false; laser.visible = false; } },
-    dbg: { hand: () => [handGrp.visible, gun.visible, handGrp.parent && handGrp.parent.type, gun.scale.toArray(), hudMesh.visible, hudMesh.position.toArray(), S.state, handFor], fakeXR() { S._fx = true; conn[0].matrixAutoUpdate = conn[1].matrixAutoUpdate = true; ctl.right = conn[0]; ctl.left = conn[1]; conn[0].position.set(0.25, -0.35, -0.5); conn[1].position.set(-0.25, -0.35, -0.5); camera.add(conn[0], conn[1]); conn[0].updateMatrixWorld(true); }, nChars: () => chars.n, cp: () => [cp.x, cp.z], fire: fireWeapon, give: id => giveAmmo(WBY[id], 50), cur: id => { S.cur = id; }, tp: teleport, hurt, kill, ppos },
+    dbg: { dot: () => [dotM.visible, dotM.position.toArray(), dotM.scale.x, S.state, !!ctl.right, menuMesh.position.toArray(), head().toArray()], hand: () => [handGrp.visible, gun.visible, handGrp.parent && handGrp.parent.type, gun.scale.toArray(), hudMesh.visible, hudMesh.position.toArray(), S.state, handFor], fakeXR() { S._fx = true; conn[0].matrixAutoUpdate = conn[1].matrixAutoUpdate = true; ctl.right = conn[0]; ctl.left = conn[1]; conn[0].position.set(0.25, -0.35, -0.5); conn[1].position.set(-0.25, -0.35, -0.5); camera.add(conn[0], conn[1]); conn[0].updateMatrixWorld(true); }, nChars: () => chars.n, cp: () => [cp.x, cp.z], fire: fireWeapon, give: id => giveAmmo(WBY[id], 50), cur: id => { S.cur = id; }, tp: teleport, hurt, kill, ppos },
   };
   window.__G = api;
   if (Q.has('play')) { S.botN = Q.has('bots') ? +Q.get('bots') : S.botN; S.pedN = Q.has('peds') ? +Q.get('peds') : S.pedN; startGame(Q.get('play') === 'free' ? 'free' : 'dm'); }

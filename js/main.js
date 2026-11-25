@@ -26,7 +26,7 @@ camera.position.y = EYE;
 
 const loadTex = (url, o) => new Promise((ok, no) => new THREE.TextureLoader().load(url, t => { Object.assign(t, o); t.needsUpdate = true; ok(t); }, undefined, no));
 
-let W = null, blocked = null, MW = 400;
+let W = null, blocked = null, MW = 400, game = null;
 
 async function init() {
   const [world, atlas, tiles, idx] = await Promise.all([
@@ -147,9 +147,9 @@ let yaw = 0, pitch = 0;
 const keys = {};
 addEventListener('keydown', e => { keys[e.code] = true; }); addEventListener('keyup', e => { keys[e.code] = false; });
 let drag = false;
-renderer.domElement.addEventListener('pointerdown', e => { drag = true; renderer.domElement.setPointerCapture(e.pointerId); });
+renderer.domElement.addEventListener('pointerdown', e => { if (game && game.ownsMouse()) return; drag = true; renderer.domElement.setPointerCapture(e.pointerId); });
 renderer.domElement.addEventListener('pointerup', () => { drag = false; });
-renderer.domElement.addEventListener('pointermove', e => { if (!drag || renderer.xr.isPresenting) return; yaw -= e.movementX * 0.004; pitch = Math.max(-1.4, Math.min(1.4, pitch - e.movementY * 0.004)); });
+renderer.domElement.addEventListener('pointermove', e => { if (game && game.ownsMouse()) return; if (!drag || renderer.xr.isPresenting) return; yaw -= e.movementX * 0.004; pitch = Math.max(-1.4, Math.min(1.4, pitch - e.movementY * 0.004)); });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
 const isBlocked = (x, z) => { const cx = Math.floor(x / TS), cz = Math.floor(z / TS); if (cx < 0 || cz < 0 || cx >= MW || cz >= MW) return true; return blocked[cz * MW + cx] === 1; };
@@ -175,8 +175,8 @@ function stepXR(dt) {
     const rel = before.clone().sub(rig.position); const c = Math.cos(ang), sn = Math.sin(ang);
     const rx2 = rel.x * c + rel.z * sn, rz2 = rel.x * -sn + rel.z * c; rig.position.x += rel.x - rx2; rig.position.z += rel.z - rz2; }
 }
-function stepDesk(dt) {
-  rig.rotation.y = yaw; camera.rotation.x = pitch;
+function stepDesk(dt, can) {
+  rig.rotation.y = yaw; camera.rotation.x = pitch; if (can === false) return;
   const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0), r = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
   if (keys.ArrowLeft) yaw += 1.6 * dt; if (keys.ArrowRight) yaw -= 1.6 * dt;
   if (f || r) { const fx = -Math.sin(yaw), fz = -Math.cos(yaw), sx = Math.cos(yaw), sz = -Math.sin(yaw); moveBy((fx * f + sx * r) * SPEED * dt, (fz * f + sz * r) * SPEED * dt); }
@@ -185,7 +185,7 @@ function stepDesk(dt) {
 let tLast = performance.now();
 renderer.setAnimationLoop(() => {
   const tn = performance.now(), dt = Math.min((tn - tLast) / 1000, 0.1); tLast = tn;
-  if (W) { if (renderer.xr.isPresenting) stepXR(dt); else stepDesk(dt);
+  if (W) { const can = !game || game.canMove(); if (renderer.xr.isPresenting) { if (can) stepXR(dt); } else stepDesk(dt, can); if (game) { try { game.update(dt); } catch (e) { if (!window.__ge) { window.__ge = 1; console.error(e); } } }
     const hp = new THREE.Vector3().setFromMatrixPosition((renderer.xr.isPresenting ? renderer.xr.getCamera() : camera).matrixWorld); if (window.__sky) window.__sky.position.copy(hp); }
   renderer.render(scene, camera);
 });
@@ -193,13 +193,15 @@ renderer.setAnimationLoop(() => {
 /* ---------- Start ---------- */
 (async () => {
   try { await init(); } catch (e) { $('m').textContent = 'Fehler beim Laden: ' + e.message; console.error(e); return; }
+  try { const { initGame } = await import('./game.js'); game = await initGame({ scene, camera, rig, renderer, world: W, TS, isBlocked, moveBy, Q, look: (dy, dp) => { yaw += dy; pitch = Math.max(-1.4, Math.min(1.4, pitch + dp)); } }); }
+  catch (e) { $('m').textContent = 'Fehler beim Laden des Spiels: ' + e.message; console.error(e); return; }
   $('m').textContent = 'Stadt geladen.';
   const hide = () => { $('s').style.display = 'none'; };
   $('z').disabled = false; $('z').onclick = hide;
   let vr = false; try { vr = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-vr')); } catch (e) { }
   if (vr) { $('b').disabled = false; $('b').onclick = async () => {
-    try { const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] }); await renderer.xr.setSession(s); hide(); s.addEventListener('end', () => { $('s').style.display = 'flex'; }); }
-    catch (e) { $('m').textContent = 'VR konnte nicht gestartet werden: ' + e.message; } }; $('m').textContent = 'Stadt geladen. Mit dem linken Stick gehen, mit dem rechten Stick drehen.'; }
-  else { $('b').textContent = 'VR nicht verfügbar'; $('m').textContent = 'Stadt geladen. Am Bildschirm: WASD gehen, Maus ziehen zum Umsehen. Für VR diese Seite im Quest-Browser öffnen.'; }
+    try { const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] }); await renderer.xr.setSession(s); hide(); game.onXR(true); s.addEventListener('end', () => { $('s').style.display = 'flex'; game.onXR(false); }); }
+    catch (e) { $('m').textContent = 'VR konnte nicht gestartet werden: ' + e.message; } }; $('m').textContent = 'Stadt geladen. Linker Stick: gehen, rechter Stick: drehen, rechter Trigger: schießen.'; }
+  else { $('b').textContent = 'VR nicht verfügbar'; $('m').textContent = 'Stadt geladen. Am Bildschirm: WASD gehen, Maus zielen, linke Maustaste schießen. Für VR diese Seite im Quest-Browser öffnen.'; }
   if (Q.has('auto')) hide();
 })();

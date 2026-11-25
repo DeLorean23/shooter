@@ -434,7 +434,7 @@ export async function initGame(C) {
   const zf = () => (S.cur === 'Scharfschuetzengewehr' ? 5 : 2.2);
   const scopeRT = new THREE.WebGLRenderTarget(512, 512), scopeCam = new THREE.PerspectiveCamera(14, 1, 0.1, 3000);
   const scopeM = new THREE.Mesh(new THREE.CircleGeometry(0.17, 40), new THREE.MeshBasicMaterial({ map: scopeRT.texture, fog: false, depthTest: false })); scopeM.renderOrder = 996; scopeM.visible = false; scene.add(scopeM);
-  const scopeR = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.185, 40), new THREE.MeshBasicMaterial({ color: 0x000000, fog: false, depthTest: false })); scopeR.renderOrder = 997; scopeM.add(scopeR);
+  const scopeR = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.185, 40), new THREE.MeshBasicMaterial({ color: 0x000000, fog: false, depthTest: false })); scopeR.renderOrder = 997; scopeM.add(scopeR); const scopeD = new THREE.Mesh(new THREE.CircleGeometry(0.008, 16), new THREE.MeshBasicMaterial({ color: 0xff1a1a, fog: false, depthTest: false })); scopeD.renderOrder = 998; scopeD.position.z = 0.001; scopeM.add(scopeD);
   function tickZoom() {
     const z = S.zoom && S.state === 'play' && !S.dead;
     if (!xrOn()) { const f = z ? BASEFOV / zf() : BASEFOV; if (Math.abs(camera.fov - f) > 0.01) { camera.fov = f; camera.updateProjectionMatrix(); } }
